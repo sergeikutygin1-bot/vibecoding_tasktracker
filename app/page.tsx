@@ -25,6 +25,16 @@ export default function Home() {
   const [inputValue, setInputValue] = useState("");
   const [isLoaded, setIsLoaded] = useState(false);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [customTimeInputs, setCustomTimeInputs] = useState<Record<string, string>>({});
+
+  // Form state for task creation
+  const [formPriority, setFormPriority] = useState<Priority | undefined>(undefined);
+  const [formDueDate, setFormDueDate] = useState<string>("");
+  const [formTimeCost, setFormTimeCost] = useState<number>(30);
+  const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
+
+  // Edit modal state
+  const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
 
   // Load tasks from localStorage on mount
   useEffect(() => {
@@ -57,12 +67,21 @@ export default function Home() {
       title,
       completed: false,
       createdAt: new Date().toISOString(),
+      timeCost: formTimeCost,
+      priority: formPriority,
+      dueDate: formDueDate || undefined,
     };
 
     const updatedTasks = [...tasks, newTask];
     setTasks(updatedTasks);
     persistTasks(updatedTasks);
+
+    // Reset form fields
     setInputValue("");
+    setFormPriority(undefined);
+    setFormDueDate("");
+    setFormTimeCost(30);
+    setShowAdvancedOptions(false);
   }
 
   function toggleTask(id: string): void {
@@ -75,6 +94,19 @@ export default function Home() {
 
   function handleInputChange(e: ChangeEvent<HTMLInputElement>): void {
     setInputValue(e.target.value);
+  }
+
+  function handleFormPriorityChange(e: ChangeEvent<HTMLSelectElement>): void {
+    const value = e.target.value as Priority | "";
+    setFormPriority(value || undefined);
+  }
+
+  function handleFormDueDateChange(e: ChangeEvent<HTMLInputElement>): void {
+    setFormDueDate(e.target.value);
+  }
+
+  function handleFormTimeCostChange(e: ChangeEvent<HTMLSelectElement>): void {
+    setFormTimeCost(parseInt(e.target.value));
   }
 
   function updateTaskDate(id: string, dueDate: string | undefined): void {
@@ -93,6 +125,27 @@ export default function Home() {
     persistTasks(updatedTasks);
   }
 
+  function updateTaskTimeCost(id: string, timeCost: number | undefined): void {
+    const updatedTasks = tasks.map((task) =>
+      task.id === id ? { ...task, timeCost } : task
+    );
+    setTasks(updatedTasks);
+    persistTasks(updatedTasks);
+  }
+
+  function deleteTask(id: string): void {
+    const updatedTasks = tasks.filter((task) => task.id !== id);
+    setTasks(updatedTasks);
+    persistTasks(updatedTasks);
+    if (editingTaskId === id) {
+      setEditingTaskId(null);
+    }
+  }
+
+  function toggleEditMode(id: string): void {
+    setEditingTaskId(editingTaskId === id ? null : id);
+  }
+
   // Helper to get priority color classes
   const getPriorityColor = (priority?: Priority) => {
     switch (priority) {
@@ -105,6 +158,16 @@ export default function Home() {
       default:
         return "border-gray-300 text-gray-600 bg-white";
     }
+  };
+
+  // Helper to format time cost
+  const formatTimeCost = (minutes: number | undefined): string => {
+    const mins = minutes ?? 30; // Default to 30 if undefined
+    if (mins < 60) return `${mins}m`;
+    const hours = Math.floor(mins / 60);
+    const remainingMins = mins % 60;
+    if (remainingMins === 0) return `${hours}h`;
+    return `${hours}h ${remainingMins}m`;
   };
 
   // Filter tasks based on selected date
@@ -129,7 +192,7 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-cyan-50 py-8">
-      <div className="mx-auto max-w-md p-4">
+      <div className="mx-auto max-w-3xl p-4">
         <div className="mb-6">
           <h1 className="text-3xl font-bold text-slate-800">Todo List</h1>
           <p className="mt-1 text-sm text-slate-600">
@@ -143,7 +206,7 @@ export default function Home() {
             <label htmlFor="task-input" className="sr-only">
               Add a new task
             </label>
-            <div className="flex gap-2">
+            <div className="flex gap-2 items-center">
               <input
                 id="task-input"
                 type="text"
@@ -153,6 +216,13 @@ export default function Home() {
                 className="flex-1 rounded-lg border border-slate-200 px-4 py-2 text-sm focus:border-cyan-500 focus:outline-none focus:ring-2 focus:ring-cyan-400"
               />
               <button
+                type="button"
+                onClick={() => setShowAdvancedOptions(!showAdvancedOptions)}
+                className="text-sm text-cyan-600 hover:text-cyan-700 font-medium px-3 py-2 rounded-lg hover:bg-cyan-50 transition-colors"
+              >
+                Options {showAdvancedOptions ? "▲" : "▼"}
+              </button>
+              <button
                 type="submit"
                 aria-label="Add task"
                 className="rounded-lg bg-cyan-600 px-6 py-2 text-sm font-medium text-white transition-colors hover:bg-cyan-700 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2"
@@ -160,6 +230,63 @@ export default function Home() {
                 Add
               </button>
             </div>
+
+            {/* Advanced options - collapsible */}
+            {showAdvancedOptions && (
+              <div className="mt-3 pt-3 border-t border-slate-200 grid grid-cols-3 gap-3">
+                {/* Time cost selector */}
+                <div>
+                  <label htmlFor="form-time" className="block text-xs font-medium text-slate-700 mb-1">
+                    Duration
+                  </label>
+                  <select
+                    id="form-time"
+                    value={formTimeCost}
+                    onChange={handleFormTimeCostChange}
+                    className="w-full text-sm rounded-lg border border-slate-300 px-3 py-2 text-slate-700 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                  >
+                    <option value="15">15 min</option>
+                    <option value="30">30 min</option>
+                    <option value="45">45 min</option>
+                    <option value="60">1 hour</option>
+                    <option value="90">1.5 hours</option>
+                    <option value="120">2 hours</option>
+                  </select>
+                </div>
+
+                {/* Priority selector */}
+                <div>
+                  <label htmlFor="form-priority" className="block text-xs font-medium text-slate-700 mb-1">
+                    Priority
+                  </label>
+                  <select
+                    id="form-priority"
+                    value={formPriority || ""}
+                    onChange={handleFormPriorityChange}
+                    className="w-full text-sm rounded-lg border border-slate-300 px-3 py-2 text-slate-700 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                  >
+                    <option value="">None</option>
+                    <option value="low">Low</option>
+                    <option value="medium">Medium</option>
+                    <option value="high">High</option>
+                  </select>
+                </div>
+
+                {/* Date picker */}
+                <div>
+                  <label htmlFor="form-date" className="block text-xs font-medium text-slate-700 mb-1">
+                    Due Date
+                  </label>
+                  <input
+                    id="form-date"
+                    type="date"
+                    value={formDueDate}
+                    onChange={handleFormDueDateChange}
+                    className="w-full text-sm rounded-lg border border-slate-300 px-3 py-2 focus:border-cyan-500 focus:outline-none focus:ring-2 focus:ring-cyan-400"
+                  />
+                </div>
+              </div>
+            )}
           </form>
 
           {/* Section header */}
@@ -189,7 +316,7 @@ export default function Home() {
               {displayedTasks.map((task) => (
                 <div
                   key={task.id}
-                  className={`flex items-center gap-2 rounded-lg py-2 px-2 pl-3 border-l-4 transition-colors hover:bg-gray-50 ${getPriorityColor(task.priority)}`}
+                  className={`flex items-center gap-3 rounded-lg py-2 px-3 pl-4 border-l-4 transition-colors hover:bg-gray-50 ${getPriorityColor(task.priority)}`}
                 >
                   <input
                     type="checkbox"
@@ -198,64 +325,46 @@ export default function Home() {
                     onChange={() => toggleTask(task.id)}
                     className="h-5 w-5 cursor-pointer rounded border-gray-300 text-blue-600 focus:ring-2 focus:ring-blue-500"
                   />
-                  <label
-                    htmlFor={`task-${task.id}`}
-                    onClick={() => toggleTask(task.id)}
-                    className={`flex-1 cursor-pointer select-none text-sm ${
-                      task.completed
-                        ? "text-gray-400 line-through"
-                        : "text-gray-700"
-                    }`}
-                  >
-                    {task.title}
-                  </label>
+                  <div className="flex-1 flex items-center gap-2">
+                    <label
+                      htmlFor={`task-${task.id}`}
+                      onClick={() => toggleTask(task.id)}
+                      className={`cursor-pointer select-none text-sm ${
+                        task.completed
+                          ? "text-gray-400 line-through"
+                          : "text-gray-700"
+                      }`}
+                    >
+                      {task.title}
+                    </label>
 
-                  {/* Priority selector */}
-                  <select
-                    value={task.priority || ""}
-                    onChange={(e) => {
-                      const value = e.target.value as Priority | "";
-                      updateTaskPriority(task.id, value || undefined);
-                    }}
-                    className={`text-xs rounded border px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-500 ${
-                      task.priority
-                        ? task.priority === "low"
-                          ? "border-green-500 text-green-700"
-                          : task.priority === "medium"
-                          ? "border-yellow-500 text-yellow-700"
-                          : "border-red-500 text-red-700"
-                        : "border-gray-300 text-gray-600"
-                    }`}
-                  >
-                    <option value="">Priority</option>
-                    <option value="low">Low</option>
-                    <option value="medium">Medium</option>
-                    <option value="high">High</option>
-                  </select>
-
-                  {/* Date picker */}
-                  <div className="flex items-center gap-1">
-                    <input
-                      type="date"
-                      value={task.dueDate || ""}
-                      onChange={(e) => {
-                        const value = e.target.value;
-                        updateTaskDate(task.id, value || undefined);
-                      }}
-                      className="text-xs rounded border border-slate-200 px-2 py-1 focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-400"
-                    />
-                    {task.dueDate && (
-                      <button
-                        onClick={() => updateTaskDate(task.id, undefined)}
-                        className="p-1 text-gray-400 hover:text-red-600"
-                        aria-label="Clear date"
-                      >
-                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                      </button>
-                    )}
+                    {/* Time cost badge */}
+                    <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-cyan-100 text-cyan-700 border border-cyan-300">
+                      {formatTimeCost(task.timeCost)}
+                    </span>
                   </div>
+
+                  {/* Edit button */}
+                  <button
+                    onClick={() => toggleEditMode(task.id)}
+                    className="p-1.5 rounded-lg text-cyan-600 hover:text-cyan-700 hover:bg-cyan-50 transition-colors"
+                    aria-label="Edit task"
+                  >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                    </svg>
+                  </button>
+
+                  {/* Delete button */}
+                  <button
+                    onClick={() => deleteTask(task.id)}
+                    className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                    aria-label="Delete task"
+                  >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                  </button>
                 </div>
               ))}
             </div>
@@ -276,6 +385,104 @@ export default function Home() {
             remaining
           </div>
         )}
+
+        {/* Edit Modal */}
+        {editingTaskId && (() => {
+          const editingTask = tasks.find(t => t.id === editingTaskId);
+          if (!editingTask) return null;
+
+          return (
+            <div
+              className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+              onClick={() => setEditingTaskId(null)}
+            >
+              <div
+                className="bg-white rounded-2xl shadow-xl p-6 max-w-md w-full mx-4 border border-blue-100"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <h3 className="text-lg font-semibold text-slate-800 mb-4">Edit Task</h3>
+
+                {/* Task title display */}
+                <div className="mb-4">
+                  <label className="block text-xs font-medium text-slate-700 mb-1">
+                    Task
+                  </label>
+                  <div className="text-sm text-slate-700 p-3 bg-slate-50 rounded-lg border border-slate-200">
+                    {editingTask.title}
+                  </div>
+                </div>
+
+                {/* Time cost selector */}
+                <div className="mb-4">
+                  <label htmlFor="edit-time" className="block text-xs font-medium text-slate-700 mb-1">
+                    Duration
+                  </label>
+                  <select
+                    id="edit-time"
+                    value={editingTask.timeCost ?? 30}
+                    onChange={(e) => updateTaskTimeCost(editingTaskId, parseInt(e.target.value))}
+                    className="w-full text-sm rounded-lg border border-slate-300 px-3 py-2 text-slate-700 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                  >
+                    <option value="15">15 min</option>
+                    <option value="30">30 min</option>
+                    <option value="45">45 min</option>
+                    <option value="60">1 hour</option>
+                    <option value="90">1.5 hours</option>
+                    <option value="120">2 hours</option>
+                  </select>
+                </div>
+
+                {/* Priority selector */}
+                <div className="mb-4">
+                  <label htmlFor="edit-priority" className="block text-xs font-medium text-slate-700 mb-1">
+                    Priority
+                  </label>
+                  <select
+                    id="edit-priority"
+                    value={editingTask.priority || ""}
+                    onChange={(e) => {
+                      const value = e.target.value as Priority | "";
+                      updateTaskPriority(editingTaskId, value || undefined);
+                    }}
+                    className="w-full text-sm rounded-lg border border-slate-300 px-3 py-2 text-slate-700 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                  >
+                    <option value="">None</option>
+                    <option value="low">Low</option>
+                    <option value="medium">Medium</option>
+                    <option value="high">High</option>
+                  </select>
+                </div>
+
+                {/* Date picker */}
+                <div className="mb-6">
+                  <label htmlFor="edit-date" className="block text-xs font-medium text-slate-700 mb-1">
+                    Due Date
+                  </label>
+                  <input
+                    id="edit-date"
+                    type="date"
+                    value={editingTask.dueDate || ""}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      updateTaskDate(editingTaskId, value || undefined);
+                    }}
+                    className="w-full text-sm rounded-lg border border-slate-300 px-3 py-2 focus:border-cyan-500 focus:outline-none focus:ring-2 focus:ring-cyan-400"
+                  />
+                </div>
+
+                {/* Modal buttons */}
+                <div className="flex gap-2 justify-end">
+                  <button
+                    onClick={() => setEditingTaskId(null)}
+                    className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
       </div>
     </main>
   );

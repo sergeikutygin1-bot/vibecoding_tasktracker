@@ -29,6 +29,19 @@ export default function Calendar({ tasks, selectedDate, onDateSelect }: Calendar
     return tasks.filter(task => task.dueDate === dateStr);
   };
 
+  // Calculate total time cost for a specific day in minutes
+  const calculateDailyTime = (day: number): number => {
+    const tasksForDay = getTasksForDate(day);
+    return tasksForDay.reduce((total, task) => {
+      return total + (task.timeCost ?? 30); // Default to 30 if undefined
+    }, 0);
+  };
+
+  // Check if daily time exceeds 5 hours (300 minutes)
+  const isOverTimeLimit = (day: number): boolean => {
+    return calculateDailyTime(day) > 300;
+  };
+
   // Get priority color for dots
   const getPriorityDotColor = (priority?: Priority): string => {
     switch (priority) {
@@ -96,6 +109,7 @@ export default function Calendar({ tasks, selectedDate, onDateSelect }: Calendar
     const tasksForDay = getTasksForDate(day);
     const isCurrentDay = isToday(day);
     const isSelectedDay = isSelected(day);
+    const overLimit = isOverTimeLimit(day);
 
     calendarDays.push(
       <button
@@ -103,9 +117,14 @@ export default function Calendar({ tasks, selectedDate, onDateSelect }: Calendar
         onClick={() => handleDateClick(day)}
         className={`
           aspect-square p-1 rounded-lg text-sm font-medium transition-all
-          hover:bg-cyan-50 focus:outline-none focus:ring-2 focus:ring-cyan-500
-          ${isCurrentDay ? 'bg-cyan-100 text-cyan-700' : 'text-slate-700'}
-          ${isSelectedDay ? 'ring-2 ring-cyan-500 bg-cyan-50' : ''}
+          focus:outline-none focus:ring-2 focus:ring-cyan-500
+          ${overLimit
+            ? 'bg-red-100 text-red-800 hover:bg-red-200'
+            : isCurrentDay
+              ? 'bg-cyan-100 text-cyan-700 hover:bg-cyan-50'
+              : 'text-slate-700 hover:bg-cyan-50'
+          }
+          ${isSelectedDay ? 'ring-2 ring-cyan-500' : ''}
         `}
       >
         <div className="flex flex-col items-center justify-center h-full">
