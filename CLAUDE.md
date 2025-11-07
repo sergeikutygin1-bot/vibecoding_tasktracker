@@ -1,0 +1,2 @@
+- Never run "npm run dev".
+- Use "npm run build" to check if code compiles or not. See results and fix code if needed.
