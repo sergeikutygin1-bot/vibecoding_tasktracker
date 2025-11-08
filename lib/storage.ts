@@ -1,3 +1,15 @@
+/**
+ * DEPRECATED: This file is no longer used in the application.
+ *
+ * The app has been migrated from localStorage to a database-backed API.
+ * All task operations now use the API client in lib/api-client.ts.
+ *
+ * This file is kept for reference only and should not be imported
+ * in new code.
+ *
+ * Migration date: 2025-11-08
+ */
+
 import { Task } from "@/types";
 
 const STORAGE_KEY = "todo.tasks:v1";

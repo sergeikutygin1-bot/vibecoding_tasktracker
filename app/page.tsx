@@ -2,23 +2,9 @@
 
 import { useState, useEffect, FormEvent, ChangeEvent } from "react";
 import { Task, Priority } from "@/types";
-import { getTasks, saveTasks } from "@/lib/storage";
+import { taskAPI } from "@/lib/api-client";
+import toast from "react-hot-toast";
 import Calendar from "./components/Calendar";
-
-const INITIAL_TASKS: Task[] = [
-  {
-    id: "1",
-    title: "Welcome to your todo list!",
-    completed: false,
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: "2",
-    title: "Click to mark tasks as complete",
-    completed: true,
-    createdAt: new Date().toISOString(),
-  },
-];
 
 export default function Home() {
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -47,60 +33,105 @@ export default function Home() {
   const [selectedTaskIndex, setSelectedTaskIndex] = useState<number | null>(null);
   const [activeFocus, setActiveFocus] = useState<"tasks" | "calendar" | null>(null);
 
-  // Load tasks from localStorage on mount
+  // API loading and error states
+  const [isLoadingTasks, setIsLoadingTasks] = useState(false);
+  const [isCreatingTask, setIsCreatingTask] = useState(false);
+  const [updatingTaskIds, setUpdatingTaskIds] = useState<Set<string>>(new Set());
+  const [error, setError] = useState<string | null>(null);
+
+  // Load tasks from database on mount
   useEffect(() => {
     loadTasks();
   }, []);
 
-  function loadTasks(): void {
-    const stored = getTasks();
-    if (stored.length > 0) {
-      setTasks(stored);
-    } else {
-      setTasks(INITIAL_TASKS);
-      saveTasks(INITIAL_TASKS);
+  async function loadTasks(): Promise<void> {
+    try {
+      setIsLoadingTasks(true);
+      setError(null);
+
+      const fetchedTasks = await taskAPI.getAll();
+      setTasks(fetchedTasks);
+      setIsLoaded(true);
+    } catch (err) {
+      console.error('Error loading tasks:', err);
+      setError('Failed to load tasks');
+      toast.error('Failed to load tasks. Please try again.');
+
+      // Fallback to empty array on error
+      setTasks([]);
+      setIsLoaded(true);
+    } finally {
+      setIsLoadingTasks(false);
     }
-    setIsLoaded(true);
   }
 
-  function persistTasks(updatedTasks: Task[]): void {
-    saveTasks(updatedTasks);
-  }
-
-  function addTask(e: FormEvent<HTMLFormElement>): void {
+  async function addTask(e: FormEvent<HTMLFormElement>): Promise<void> {
     e.preventDefault();
 
     const title = inputValue.trim();
     if (!title) return;
 
-    const newTask: Task = {
-      id: Date.now().toString(),
-      title,
-      completed: false,
-      createdAt: new Date().toISOString(),
-      timeCost: formTimeCost,
-      priority: formPriority,
-      dueDate: formDueDate || undefined,
-    };
+    try {
+      setIsCreatingTask(true);
 
-    const updatedTasks = [...tasks, newTask];
-    setTasks(updatedTasks);
-    persistTasks(updatedTasks);
+      const newTask = await taskAPI.create({
+        title,
+        priority: formPriority,
+        dueDate: formDueDate || undefined,
+        timeCost: formTimeCost,
+      });
 
-    // Reset form fields
-    setInputValue("");
-    setFormPriority(undefined);
-    setFormDueDate("");
-    setFormTimeCost(30);
-    setShowAdvancedOptions(false);
+      // Add to local state
+      setTasks([...tasks, newTask]);
+
+      // Reset form fields only after success
+      setInputValue("");
+      setFormPriority(undefined);
+      setFormDueDate("");
+      setFormTimeCost(30);
+      setShowAdvancedOptions(false);
+
+      toast.success('Task created successfully!');
+    } catch (err) {
+      console.error('Error creating task:', err);
+      toast.error('Failed to create task. Please try again.');
+    } finally {
+      setIsCreatingTask(false);
+    }
   }
 
-  function toggleTask(id: string): void {
-    const updatedTasks = tasks.map((task) =>
+  async function toggleTask(id: string): Promise<void> {
+    // Find the original task for rollback
+    const originalTask = tasks.find((t) => t.id === id);
+    if (!originalTask) return;
+
+    // Optimistic update - update UI immediately
+    const optimisticTasks = tasks.map((task) =>
       task.id === id ? { ...task, completed: !task.completed } : task
     );
-    setTasks(updatedTasks);
-    persistTasks(updatedTasks);
+    setTasks(optimisticTasks);
+
+    // Track pending update
+    setUpdatingTaskIds((prev) => new Set(prev).add(id));
+
+    try {
+      await taskAPI.update(id, { completed: !originalTask.completed });
+    } catch (err) {
+      console.error('Error toggling task:', err);
+
+      // Rollback on error
+      setTasks(tasks.map((task) =>
+        task.id === id ? originalTask : task
+      ));
+
+      toast.error('Failed to update task. Changes reverted.');
+    } finally {
+      setUpdatingTaskIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+    }
   }
 
   function handleInputChange(e: ChangeEvent<HTMLInputElement>): void {
@@ -120,36 +151,91 @@ export default function Home() {
     setFormTimeCost(parseInt(e.target.value));
   }
 
-  function updateTaskDate(id: string, dueDate: string | undefined): void {
-    const updatedTasks = tasks.map((task) =>
-      task.id === id ? { ...task, dueDate } : task
-    );
-    setTasks(updatedTasks);
-    persistTasks(updatedTasks);
+  async function updateTaskDate(id: string, dueDate: string | undefined): Promise<void> {
+    setUpdatingTaskIds((prev) => new Set(prev).add(id));
+
+    try {
+      const updatedTask = await taskAPI.update(id, { dueDate: dueDate || null });
+
+      setTasks(tasks.map((task) =>
+        task.id === id ? updatedTask : task
+      ));
+    } catch (err) {
+      console.error('Error updating task date:', err);
+      toast.error('Failed to update task date.');
+    } finally {
+      setUpdatingTaskIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+    }
   }
 
-  function updateTaskPriority(id: string, priority: Priority | undefined): void {
-    const updatedTasks = tasks.map((task) =>
-      task.id === id ? { ...task, priority } : task
-    );
-    setTasks(updatedTasks);
-    persistTasks(updatedTasks);
+  async function updateTaskPriority(id: string, priority: Priority | undefined): Promise<void> {
+    setUpdatingTaskIds((prev) => new Set(prev).add(id));
+
+    try {
+      const updatedTask = await taskAPI.update(id, { priority: priority || null });
+
+      setTasks(tasks.map((task) =>
+        task.id === id ? updatedTask : task
+      ));
+    } catch (err) {
+      console.error('Error updating task priority:', err);
+      toast.error('Failed to update task priority.');
+    } finally {
+      setUpdatingTaskIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+    }
   }
 
-  function updateTaskTimeCost(id: string, timeCost: number | undefined): void {
-    const updatedTasks = tasks.map((task) =>
-      task.id === id ? { ...task, timeCost } : task
-    );
-    setTasks(updatedTasks);
-    persistTasks(updatedTasks);
+  async function updateTaskTimeCost(id: string, timeCost: number | undefined): Promise<void> {
+    setUpdatingTaskIds((prev) => new Set(prev).add(id));
+
+    try {
+      const updatedTask = await taskAPI.update(id, { timeCost: timeCost || null });
+
+      setTasks(tasks.map((task) =>
+        task.id === id ? updatedTask : task
+      ));
+    } catch (err) {
+      console.error('Error updating task time cost:', err);
+      toast.error('Failed to update task time cost.');
+    } finally {
+      setUpdatingTaskIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+    }
   }
 
-  function deleteTask(id: string): void {
-    const updatedTasks = tasks.filter((task) => task.id !== id);
-    setTasks(updatedTasks);
-    persistTasks(updatedTasks);
+  async function deleteTask(id: string): Promise<void> {
+    // Save the task for potential rollback
+    const taskToDelete = tasks.find((t) => t.id === id);
+    if (!taskToDelete) return;
+
+    // Optimistic delete - remove from UI immediately
+    setTasks(tasks.filter((task) => task.id !== id));
+
+    // Close edit modal if this task was being edited
     if (editingTaskId === id) {
       setEditingTaskId(null);
+    }
+
+    try {
+      await taskAPI.delete(id);
+      toast.success('Task deleted successfully!');
+    } catch (err) {
+      console.error('Error deleting task:', err);
+
+      // Rollback on error - restore the task
+      setTasks([...tasks, taskToDelete]);
+      toast.error('Failed to delete task. Restored.');
     }
   }
 
