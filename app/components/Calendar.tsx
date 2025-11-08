@@ -23,10 +23,10 @@ export default function Calendar({ tasks, selectedDate, onDateSelect }: Calendar
 
   const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
-  // Get tasks for a specific date
+  // Get tasks for a specific date (excluding completed tasks)
   const getTasksForDate = (day: number): Task[] => {
     const dateStr = formatDate(currentYear, currentMonth, day);
-    return tasks.filter(task => task.dueDate === dateStr);
+    return tasks.filter(task => task.dueDate === dateStr && !task.completed);
   };
 
   // Calculate total time cost for a specific day in minutes
@@ -145,7 +145,7 @@ export default function Calendar({ tasks, selectedDate, onDateSelect }: Calendar
   }
 
   return (
-    <div className="rounded-2xl border border-blue-100 bg-white p-6 shadow-md">
+    <div className="rounded-2xl border border-blue-100 bg-white p-6 shadow-md h-full flex flex-col">
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-lg font-semibold text-slate-800">

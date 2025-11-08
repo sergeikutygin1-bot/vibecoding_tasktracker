@@ -36,6 +36,10 @@ export default function Home() {
   // Edit modal state
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
 
+  // Sort state
+  const [sortByPriority, setSortByPriority] = useState<"none" | "high-to-low" | "low-to-high">("none");
+  const [sortByDuration, setSortByDuration] = useState<"none" | "short-to-long" | "long-to-short">("none");
+
   // Load tasks from localStorage on mount
   useEffect(() => {
     loadTasks();
@@ -170,10 +174,49 @@ export default function Home() {
     return `${hours}h ${remainingMins}m`;
   };
 
-  // Filter tasks based on selected date
-  const displayedTasks = selectedDate
+  // Helper to get priority value for sorting
+  const getPriorityValue = (priority?: Priority): number => {
+    switch (priority) {
+      case "high": return 3;
+      case "medium": return 2;
+      case "low": return 1;
+      default: return 0; // No priority goes at the end
+    }
+  };
+
+  // Filter tasks by selected date, then apply sorting
+  let displayedTasks = selectedDate
     ? tasks.filter((task) => task.dueDate === selectedDate)
-    : tasks.filter((task) => !task.dueDate); // Show only tasks without dates in main list
+    : tasks;
+
+  // Apply sorting
+  displayedTasks = [...displayedTasks].sort((a, b) => {
+    // First, sort by priority if enabled
+    if (sortByPriority !== "none") {
+      const priorityA = getPriorityValue(a.priority);
+      const priorityB = getPriorityValue(b.priority);
+
+      if (priorityA !== priorityB) {
+        return sortByPriority === "high-to-low"
+          ? priorityB - priorityA
+          : priorityA - priorityB;
+      }
+    }
+
+    // Then, sort by duration as secondary sort
+    if (sortByDuration !== "none") {
+      const durationA = a.timeCost ?? 30;
+      const durationB = b.timeCost ?? 30;
+
+      if (durationA !== durationB) {
+        return sortByDuration === "short-to-long"
+          ? durationA - durationB
+          : durationB - durationA;
+      }
+    }
+
+    return 0;
+  });
 
   const tasksWithDates = tasks.filter((task) => task.dueDate);
 
@@ -192,15 +235,17 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-cyan-50 py-8">
-      <div className="mx-auto max-w-3xl p-4">
-        <div className="mb-6">
-          <h1 className="text-3xl font-bold text-slate-800">Todo List</h1>
-          <p className="mt-1 text-sm text-slate-600">
-            Keep track of your tasks
-          </p>
-        </div>
-
-        <div className="rounded-2xl border border-blue-100 bg-white p-6 shadow-md mb-6">
+      <div className="mx-auto max-w-7xl p-4">
+        <div className="flex flex-col lg:flex-row gap-6 lg:items-stretch">
+          {/* Left Panel - Tasks (40%) */}
+          <div className="w-full lg:w-2/5 flex flex-col">
+        <div className="rounded-2xl border border-blue-100 bg-white p-6 shadow-md flex flex-col h-[800px]">
+            <div className="mb-6">
+              <h1 className="text-3xl font-bold text-slate-800">Todo List</h1>
+              <p className="mt-1 text-sm text-slate-600">
+                Keep track of your tasks
+              </p>
+            </div>
           {/* Input form */}
           <form onSubmit={addTask} className="mb-6">
             <label htmlFor="task-input" className="sr-only">
@@ -289,30 +334,83 @@ export default function Home() {
             )}
           </form>
 
+          {/* Sort controls */}
+          <div className="mb-4 flex gap-3 items-center">
+            {/* Priority sort */}
+            <div className="flex-1">
+              <label htmlFor="sort-priority" className="block text-xs font-medium text-slate-700 mb-1">
+                Sort by Priority
+              </label>
+              <select
+                id="sort-priority"
+                value={sortByPriority}
+                onChange={(e) => setSortByPriority(e.target.value as "none" | "high-to-low" | "low-to-high")}
+                className="w-full text-sm rounded-lg border border-slate-300 px-3 py-2 text-slate-700 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+              >
+                <option value="none">None</option>
+                <option value="high-to-low">High → Low</option>
+                <option value="low-to-high">Low → High</option>
+              </select>
+            </div>
+
+            {/* Duration sort */}
+            <div className="flex-1">
+              <label htmlFor="sort-duration" className="block text-xs font-medium text-slate-700 mb-1">
+                Sort by Duration
+              </label>
+              <select
+                id="sort-duration"
+                value={sortByDuration}
+                onChange={(e) => setSortByDuration(e.target.value as "none" | "short-to-long" | "long-to-short")}
+                className="w-full text-sm rounded-lg border border-slate-300 px-3 py-2 text-slate-700 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+              >
+                <option value="none">None</option>
+                <option value="short-to-long">Short → Long</option>
+                <option value="long-to-short">Long → Short</option>
+              </select>
+            </div>
+          </div>
+
           {/* Section header */}
           <div className="mb-3 flex items-center justify-between">
             <h2 className="text-sm font-semibold text-slate-700">
-              {selectedDate ? `Tasks for ${selectedDate}` : "Tasks without dates"}
+              {(() => {
+                const activeSorts = [
+                  sortByPriority !== 'none' ? 'priority' : null,
+                  sortByDuration !== 'none' ? 'duration' : null
+                ].filter(Boolean).length;
+
+                const baseTitle = selectedDate ? `Tasks for ${selectedDate}` : 'All Tasks';
+
+                return activeSorts > 0
+                  ? `${baseTitle} (sorted by ${activeSorts} ${activeSorts > 1 ? 'criteria' : 'criterion'})`
+                  : baseTitle;
+              })()}
             </h2>
-            {selectedDate && (
+            {(selectedDate || sortByPriority !== 'none' || sortByDuration !== 'none') && (
               <button
-                onClick={() => setSelectedDate(null)}
+                onClick={() => {
+                  setSelectedDate(null);
+                  setSortByPriority('none');
+                  setSortByDuration('none');
+                }}
                 className="text-xs text-cyan-600 hover:text-cyan-700 font-medium"
               >
-                Clear filter
+                Clear all
               </button>
             )}
           </div>
 
           {/* Task list */}
+          <div className="flex-1 min-h-0 flex flex-col">
           {displayedTasks.length === 0 ? (
             <div className="py-8 text-center">
               <p className="text-slate-500 text-sm">
-                {selectedDate ? "No tasks for this date" : "No tasks without dates"}
+                No tasks yet. Add one above!
               </p>
             </div>
           ) : (
-            <div className="space-y-1">
+            <div className="space-y-1 overflow-y-auto h-full">
               {displayedTasks.map((task) => (
                 <div
                   key={task.id}
@@ -369,22 +467,27 @@ export default function Home() {
               ))}
             </div>
           )}
-        </div>
-
-        {/* Calendar */}
-        <Calendar
-          tasks={tasksWithDates}
-          selectedDate={selectedDate}
-          onDateSelect={setSelectedDate}
-        />
-
-        {/* Task count */}
-        {tasks.length > 0 && (
-          <div className="mt-4 text-center text-sm text-slate-600">
-            {tasks.filter((t) => !t.completed).length} of {tasks.length} tasks
-            remaining
           </div>
-        )}
+
+          {/* Task count */}
+          {tasks.length > 0 && (
+            <div className="mt-4 pt-4 border-t border-slate-200 text-center text-sm text-slate-600">
+              {tasks.filter((t) => !t.completed).length} of {tasks.length} tasks
+              remaining
+            </div>
+          )}
+        </div>
+          </div>
+
+          {/* Right Panel - Calendar (60%) */}
+          <div className="w-full lg:w-3/5 flex flex-col">
+            <Calendar
+              tasks={tasksWithDates}
+              selectedDate={selectedDate}
+              onDateSelect={setSelectedDate}
+            />
+          </div>
+        </div>
 
         {/* Edit Modal */}
         {editingTaskId && (() => {
