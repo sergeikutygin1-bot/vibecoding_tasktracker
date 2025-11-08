@@ -40,6 +40,13 @@ export default function Home() {
   const [sortByPriority, setSortByPriority] = useState<"none" | "high-to-low" | "low-to-high">("none");
   const [sortByDuration, setSortByDuration] = useState<"none" | "short-to-long" | "long-to-short">("none");
 
+  // Search state
+  const [searchQuery, setSearchQuery] = useState<string>("");
+
+  // Keyboard navigation state
+  const [selectedTaskIndex, setSelectedTaskIndex] = useState<number | null>(null);
+  const [activeFocus, setActiveFocus] = useState<"tasks" | "calendar" | null>(null);
+
   // Load tasks from localStorage on mount
   useEffect(() => {
     loadTasks();
@@ -184,10 +191,18 @@ export default function Home() {
     }
   };
 
-  // Filter tasks by selected date, then apply sorting
+  // Filter tasks by selected date, then by search query, then apply sorting
   let displayedTasks = selectedDate
     ? tasks.filter((task) => task.dueDate === selectedDate)
     : tasks;
+
+  // Apply search filter (case-insensitive)
+  if (searchQuery.trim()) {
+    const query = searchQuery.toLowerCase();
+    displayedTasks = displayedTasks.filter((task) =>
+      task.title.toLowerCase().includes(query)
+    );
+  }
 
   // Apply sorting
   displayedTasks = [...displayedTasks].sort((a, b) => {
@@ -220,6 +235,108 @@ export default function Home() {
 
   const tasksWithDates = tasks.filter((task) => task.dueDate);
 
+  // Clear selection when displayed tasks change
+  useEffect(() => {
+    setSelectedTaskIndex(null);
+  }, [displayedTasks.length, searchQuery, selectedDate, sortByPriority, sortByDuration]);
+
+  // Scroll selected task into view
+  useEffect(() => {
+    if (selectedTaskIndex !== null) {
+      const taskElement = document.querySelector(`[data-task-index="${selectedTaskIndex}"]`);
+      if (taskElement) {
+        taskElement.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+    }
+  }, [selectedTaskIndex]);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Check if user is typing in an input field
+      const target = e.target as HTMLElement;
+      const isInputFocused = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT';
+
+      // Tab key: Switch focus between tasks and calendar
+      if (e.key === 'Tab' && !isInputFocused) {
+        e.preventDefault();
+        if (e.shiftKey) {
+          // Shift+Tab: Move focus backwards (calendar to tasks)
+          setActiveFocus(activeFocus === "calendar" ? "tasks" : "calendar");
+        } else {
+          // Tab: Move focus forwards (tasks to calendar)
+          setActiveFocus(activeFocus === "tasks" ? "calendar" : "tasks");
+        }
+        return;
+      }
+
+      // Ctrl/Cmd + Enter: Quick add task or focus input (global)
+      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+        e.preventDefault();
+
+        // If calendar is focused with a selected date, pre-fill the date
+        if (activeFocus === "calendar" && selectedDate) {
+          setShowAdvancedOptions(true);
+          setFormDueDate(selectedDate);
+        }
+
+        setActiveFocus("tasks");
+        const taskInput = document.getElementById('task-input') as HTMLInputElement;
+        if (taskInput) {
+          if (document.activeElement === taskInput && taskInput.value.trim()) {
+            // If input is focused and has text, submit the form
+            const form = taskInput.closest('form');
+            if (form) form.requestSubmit();
+          } else {
+            // Otherwise, just focus the input
+            taskInput.focus();
+          }
+        }
+        return;
+      }
+
+      // Don't handle other shortcuts when typing in input fields
+      if (isInputFocused) return;
+
+      // Only handle task navigation if tasks have focus (or no focus set)
+      const canNavigateTasks = activeFocus === "tasks" || activeFocus === null;
+
+      // Arrow Down: Select next task
+      if (e.key === 'ArrowDown' && canNavigateTasks) {
+        e.preventDefault();
+        if (displayedTasks.length === 0) return;
+        setActiveFocus("tasks");
+        setSelectedTaskIndex((prev) => {
+          if (prev === null) return 0;
+          return Math.min(prev + 1, displayedTasks.length - 1);
+        });
+      }
+
+      // Arrow Up: Select previous task
+      if (e.key === 'ArrowUp' && canNavigateTasks) {
+        e.preventDefault();
+        if (displayedTasks.length === 0) return;
+        setActiveFocus("tasks");
+        setSelectedTaskIndex((prev) => {
+          if (prev === null) return displayedTasks.length - 1;
+          return Math.max(prev - 1, 0);
+        });
+      }
+
+      // Space: Toggle selected task (only when tasks focused)
+      if (e.key === ' ' && selectedTaskIndex !== null && activeFocus === "tasks") {
+        e.preventDefault();
+        const selectedTask = displayedTasks[selectedTaskIndex];
+        if (selectedTask) {
+          toggleTask(selectedTask.id);
+        }
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [displayedTasks, selectedTaskIndex, activeFocus]);
+
   // Prevent hydration mismatch by not rendering until loaded
   if (!isLoaded) {
     return (
@@ -239,7 +356,10 @@ export default function Home() {
         <div className="flex flex-col lg:flex-row gap-6 lg:items-stretch">
           {/* Left Panel - Tasks (40%) */}
           <div className="w-full lg:w-2/5 flex flex-col">
-        <div className="rounded-2xl border border-blue-100 bg-white p-6 shadow-md flex flex-col h-[800px]">
+        <div
+          onClick={() => setActiveFocus("tasks")}
+          className={`rounded-2xl border bg-white p-6 shadow-md flex flex-col h-[800px] transition-all ${activeFocus === "tasks" ? 'border-blue-400 ring-2 ring-blue-400' : 'border-blue-100'}`}
+        >
             <div className="mb-6">
               <h1 className="text-3xl font-bold text-slate-800">Todo List</h1>
               <p className="mt-1 text-sm text-slate-600">
@@ -257,6 +377,14 @@ export default function Home() {
                 type="text"
                 value={inputValue}
                 onChange={handleInputChange}
+                onFocus={() => {
+                  // If coming from calendar with selected date, pre-fill the date
+                  if (activeFocus === "calendar" && selectedDate) {
+                    setShowAdvancedOptions(true);
+                    setFormDueDate(selectedDate);
+                  }
+                  setActiveFocus("tasks");
+                }}
                 placeholder="What needs to be done?"
                 className="flex-1 rounded-lg border border-slate-200 px-4 py-2 text-sm focus:border-cyan-500 focus:outline-none focus:ring-2 focus:ring-cyan-400"
               />
@@ -345,6 +473,7 @@ export default function Home() {
                 id="sort-priority"
                 value={sortByPriority}
                 onChange={(e) => setSortByPriority(e.target.value as "none" | "high-to-low" | "low-to-high")}
+                onFocus={() => setActiveFocus("tasks")}
                 className="w-full text-sm rounded-lg border border-slate-300 px-3 py-2 text-slate-700 focus:outline-none focus:ring-2 focus:ring-cyan-500"
               >
                 <option value="none">None</option>
@@ -362,6 +491,7 @@ export default function Home() {
                 id="sort-duration"
                 value={sortByDuration}
                 onChange={(e) => setSortByDuration(e.target.value as "none" | "short-to-long" | "long-to-short")}
+                onFocus={() => setActiveFocus("tasks")}
                 className="w-full text-sm rounded-lg border border-slate-300 px-3 py-2 text-slate-700 focus:outline-none focus:ring-2 focus:ring-cyan-500"
               >
                 <option value="none">None</option>
@@ -371,30 +501,68 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Section header */}
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-slate-700">
-              {(() => {
-                const activeSorts = [
-                  sortByPriority !== 'none' ? 'priority' : null,
-                  sortByDuration !== 'none' ? 'duration' : null
-                ].filter(Boolean).length;
+          {/* Section header with search */}
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3 flex-1">
+              <h2 className="text-sm font-semibold text-slate-700 whitespace-nowrap">
+                {(() => {
+                  const activeSorts = [
+                    sortByPriority !== 'none' ? 'priority' : null,
+                    sortByDuration !== 'none' ? 'duration' : null
+                  ].filter(Boolean).length;
 
-                const baseTitle = selectedDate ? `Tasks for ${selectedDate}` : 'All Tasks';
+                  const baseTitle = selectedDate ? `Tasks for ${selectedDate}` : 'All Tasks';
 
-                return activeSorts > 0
-                  ? `${baseTitle} (sorted by ${activeSorts} ${activeSorts > 1 ? 'criteria' : 'criterion'})`
-                  : baseTitle;
-              })()}
-            </h2>
-            {(selectedDate || sortByPriority !== 'none' || sortByDuration !== 'none') && (
+                  if (searchQuery.trim()) {
+                    return `${displayedTasks.length} result${displayedTasks.length !== 1 ? 's' : ''}`;
+                  }
+
+                  return activeSorts > 0
+                    ? `${baseTitle} (sorted)`
+                    : baseTitle;
+                })()}
+              </h2>
+
+              {/* Search input */}
+              <div className="relative flex-1 max-w-xs">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <svg className="h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                </div>
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => {
+                    setSearchQuery(e.target.value);
+                    setActiveFocus("tasks");
+                  }}
+                  placeholder="Search tasks..."
+                  className="w-full pl-9 pr-8 py-1.5 text-xs rounded-lg border border-slate-300 focus:border-cyan-500 focus:outline-none focus:ring-2 focus:ring-cyan-400"
+                />
+                {searchQuery && (
+                  <button
+                    onClick={() => setSearchQuery('')}
+                    className="absolute inset-y-0 right-0 pr-2 flex items-center text-slate-400 hover:text-slate-600"
+                    aria-label="Clear search"
+                  >
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {(selectedDate || sortByPriority !== 'none' || sortByDuration !== 'none' || searchQuery.trim()) && (
               <button
                 onClick={() => {
                   setSelectedDate(null);
                   setSortByPriority('none');
                   setSortByDuration('none');
+                  setSearchQuery('');
                 }}
-                className="text-xs text-cyan-600 hover:text-cyan-700 font-medium"
+                className="text-xs text-cyan-600 hover:text-cyan-700 font-medium whitespace-nowrap"
               >
                 Clear all
               </button>
@@ -406,15 +574,26 @@ export default function Home() {
           {displayedTasks.length === 0 ? (
             <div className="py-8 text-center">
               <p className="text-slate-500 text-sm">
-                No tasks yet. Add one above!
+                {searchQuery.trim() ? (
+                  <>No tasks match &quot;{searchQuery}&quot;</>
+                ) : tasks.length === 0 ? (
+                  <>No tasks yet. Add one above!</>
+                ) : (
+                  <>No tasks found</>
+                )}
               </p>
             </div>
           ) : (
             <div className="space-y-1 overflow-y-auto h-full">
-              {displayedTasks.map((task) => (
+              {displayedTasks.map((task, index) => (
                 <div
                   key={task.id}
-                  className={`flex items-center gap-3 rounded-lg py-2 px-3 pl-4 border-l-4 transition-colors hover:bg-gray-50 ${getPriorityColor(task.priority)}`}
+                  data-task-index={index}
+                  onClick={() => {
+                    setSelectedTaskIndex(index);
+                    setActiveFocus("tasks");
+                  }}
+                  className={`flex items-center gap-3 rounded-lg py-2 px-3 pl-4 border-l-4 transition-colors hover:bg-gray-50 cursor-pointer ${getPriorityColor(task.priority)} ${selectedTaskIndex === index ? 'ring-2 ring-cyan-500 bg-cyan-50' : ''}`}
                 >
                   <input
                     type="checkbox"
@@ -485,6 +664,8 @@ export default function Home() {
               tasks={tasksWithDates}
               selectedDate={selectedDate}
               onDateSelect={setSelectedDate}
+              activeFocus={activeFocus}
+              onFocusChange={setActiveFocus}
             />
           </div>
         </div>

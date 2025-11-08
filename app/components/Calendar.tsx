@@ -6,12 +6,15 @@ interface CalendarProps {
   tasks: Task[];
   selectedDate: string | null;
   onDateSelect: (date: string | null) => void;
+  activeFocus: "tasks" | "calendar" | null;
+  onFocusChange: (focus: "calendar") => void;
 }
 
-export default function Calendar({ tasks, selectedDate, onDateSelect }: CalendarProps) {
+export default function Calendar({ tasks, selectedDate, onDateSelect, activeFocus, onFocusChange }: CalendarProps) {
   const today = new Date();
   const [currentMonth, setCurrentMonth] = React.useState(today.getMonth());
   const [currentYear, setCurrentYear] = React.useState(today.getFullYear());
+  const [focusedDay, setFocusedDay] = React.useState<number | null>(null);
 
   const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
   const firstDayOfMonth = new Date(currentYear, currentMonth, 1).getDay();
@@ -94,7 +97,118 @@ export default function Calendar({ tasks, selectedDate, onDateSelect }: Calendar
     const dateStr = formatDate(currentYear, currentMonth, day);
     // Toggle selection: if clicking the same date, deselect it
     onDateSelect(selectedDate === dateStr ? null : dateStr);
+    setFocusedDay(day);
+    onFocusChange("calendar");
   };
+
+  // Navigate to a specific day, handling month boundaries
+  const navigateToDay = (targetDay: number, targetMonth: number, targetYear: number) => {
+    // Update month/year if changed
+    if (targetMonth !== currentMonth || targetYear !== currentYear) {
+      setCurrentMonth(targetMonth);
+      setCurrentYear(targetYear);
+    }
+
+    // Select the date
+    const dateStr = formatDate(targetYear, targetMonth, targetDay);
+    onDateSelect(dateStr);
+    setFocusedDay(targetDay);
+  };
+
+  // Keyboard navigation
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Only handle calendar navigation if calendar has focus
+      if (activeFocus !== "calendar") return;
+
+      // Check if user is typing in an input field
+      const target = e.target as HTMLElement;
+      const isInputFocused = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT';
+      if (isInputFocused) return;
+
+      // Only handle arrow keys and Enter
+      if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Enter'].includes(e.key)) return;
+
+      // Get current focused day or default to today if in current month, else day 1
+      let currentDay = focusedDay;
+      if (currentDay === null) {
+        const todayDate = new Date();
+        if (currentMonth === todayDate.getMonth() && currentYear === todayDate.getFullYear()) {
+          currentDay = todayDate.getDate();
+        } else {
+          currentDay = 1;
+        }
+        setFocusedDay(currentDay);
+      }
+
+      e.preventDefault();
+
+      let newDay = currentDay;
+      let newMonth = currentMonth;
+      let newYear = currentYear;
+
+      if (e.key === 'ArrowRight') {
+        // Move to next day
+        newDay++;
+        const maxDays = new Date(newYear, newMonth + 1, 0).getDate();
+        if (newDay > maxDays) {
+          newDay = 1;
+          newMonth++;
+          if (newMonth > 11) {
+            newMonth = 0;
+            newYear++;
+          }
+        }
+      } else if (e.key === 'ArrowLeft') {
+        // Move to previous day
+        newDay--;
+        if (newDay < 1) {
+          newMonth--;
+          if (newMonth < 0) {
+            newMonth = 11;
+            newYear--;
+          }
+          newDay = new Date(newYear, newMonth + 1, 0).getDate();
+        }
+      } else if (e.key === 'ArrowDown') {
+        // Move down one week (7 days)
+        newDay += 7;
+        const maxDays = new Date(newYear, newMonth + 1, 0).getDate();
+        if (newDay > maxDays) {
+          newDay -= maxDays;
+          newMonth++;
+          if (newMonth > 11) {
+            newMonth = 0;
+            newYear++;
+          }
+        }
+      } else if (e.key === 'ArrowUp') {
+        // Move up one week (7 days)
+        newDay -= 7;
+        if (newDay < 1) {
+          newMonth--;
+          if (newMonth < 0) {
+            newMonth = 11;
+            newYear--;
+          }
+          const prevMonthDays = new Date(newYear, newMonth + 1, 0).getDate();
+          newDay += prevMonthDays;
+        }
+      } else if (e.key === 'Enter') {
+        // Select the focused day
+        if (currentDay) {
+          const dateStr = formatDate(currentYear, currentMonth, currentDay);
+          onDateSelect(dateStr);
+        }
+        return;
+      }
+
+      navigateToDay(newDay, newMonth, newYear);
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [focusedDay, currentMonth, currentYear, onDateSelect, activeFocus]);
 
   // Generate calendar days
   const calendarDays = [];
@@ -145,7 +259,7 @@ export default function Calendar({ tasks, selectedDate, onDateSelect }: Calendar
   }
 
   return (
-    <div className="rounded-2xl border border-blue-100 bg-white p-6 shadow-md h-full flex flex-col">
+    <div className={`rounded-2xl border bg-white p-6 shadow-md h-full flex flex-col transition-all ${activeFocus === "calendar" ? 'border-blue-400 ring-2 ring-blue-400' : 'border-blue-100'}`}>
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-lg font-semibold text-slate-800">
