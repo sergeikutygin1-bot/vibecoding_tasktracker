@@ -1,5 +1,6 @@
 "use client";
 
+import React from "react";
 import { Task, Priority } from "@/types";
 
 interface CalendarProps {
@@ -198,6 +199,3 @@ export default function Calendar({ tasks, selectedDate, onDateSelect }: Calendar
     </div>
   );
 }
-
-// Import React at the top
-import React from "react";
