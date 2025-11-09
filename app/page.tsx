@@ -7,6 +7,9 @@ import toast from "react-hot-toast";
 import Calendar from "./components/Calendar";
 import { useAuth } from "@/lib/auth-context";
 import AuthModal from "./components/AuthModal";
+import PrioritySelect from "./components/PrioritySelect";
+import DurationSelect from "./components/DurationSelect";
+import SortSelect from "./components/SortSelect";
 
 export default function Home() {
   const { user, loading: authLoading, signOut } = useAuth();
@@ -24,6 +27,11 @@ export default function Home() {
 
   // Edit modal state
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
+  const [editFormValues, setEditFormValues] = useState<{
+    priority?: Priority;
+    timeCost?: number;
+    dueDate?: string;
+  }>({});
 
   // Sort state
   const [sortByPriority, setSortByPriority] = useState<"none" | "high-to-low" | "low-to-high">("none");
@@ -243,7 +251,57 @@ export default function Home() {
   }
 
   function toggleEditMode(id: string): void {
-    setEditingTaskId(editingTaskId === id ? null : id);
+    if (editingTaskId === id) {
+      // Closing modal - clear form
+      setEditingTaskId(null);
+      setEditFormValues({});
+    } else {
+      // Opening modal - initialize form with task values
+      const task = tasks.find(t => t.id === id);
+      if (task) {
+        setEditFormValues({
+          priority: task.priority ?? undefined,
+          timeCost: task.timeCost ?? undefined,
+          dueDate: task.dueDate ?? undefined,
+        });
+      }
+      setEditingTaskId(id);
+    }
+  }
+
+  async function handleSaveTaskEdits(): Promise<void> {
+    if (!editingTaskId) return;
+
+    setUpdatingTaskIds((prev) => new Set(prev).add(editingTaskId));
+
+    try {
+      // Batch all changes into a single API call
+      const updatedTask = await taskAPI.update(editingTaskId, {
+        priority: editFormValues.priority || null,
+        timeCost: editFormValues.timeCost || null,
+        dueDate: editFormValues.dueDate || null,
+      });
+
+      // Update local state with API response
+      setTasks(tasks.map((task) =>
+        task.id === editingTaskId ? updatedTask : task
+      ));
+
+      // Close modal and clear form
+      setEditingTaskId(null);
+      setEditFormValues({});
+
+      toast.success('Task updated successfully');
+    } catch (err) {
+      console.error('Failed to update task:', err);
+      toast.error('Failed to update task. Please try again.');
+    } finally {
+      setUpdatingTaskIds((prev) => {
+        const next = new Set(prev);
+        next.delete(editingTaskId);
+        return next;
+      });
+    }
   }
 
   // Helper to get priority color classes
@@ -512,42 +570,20 @@ export default function Home() {
             {showAdvancedOptions && (
               <div className="mt-3 pt-3 border-t border-slate-200 grid grid-cols-3 gap-3">
                 {/* Time cost selector */}
-                <div>
-                  <label htmlFor="form-time" className="block text-xs font-medium text-slate-700 mb-1">
-                    Duration
-                  </label>
-                  <select
-                    id="form-time"
-                    value={formTimeCost}
-                    onChange={handleFormTimeCostChange}
-                    className="w-full text-sm rounded-lg border border-slate-300 px-3 py-2 text-slate-700 focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                  >
-                    <option value="15">15 min</option>
-                    <option value="30">30 min</option>
-                    <option value="45">45 min</option>
-                    <option value="60">1 hour</option>
-                    <option value="90">1.5 hours</option>
-                    <option value="120">2 hours</option>
-                  </select>
-                </div>
+                <DurationSelect
+                  value={formTimeCost}
+                  onChange={setFormTimeCost}
+                  label="Duration"
+                  id="form-time"
+                />
 
                 {/* Priority selector */}
-                <div>
-                  <label htmlFor="form-priority" className="block text-xs font-medium text-slate-700 mb-1">
-                    Priority
-                  </label>
-                  <select
-                    id="form-priority"
-                    value={formPriority || ""}
-                    onChange={handleFormPriorityChange}
-                    className="w-full text-sm rounded-lg border border-slate-300 px-3 py-2 text-slate-700 focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                  >
-                    <option value="">None</option>
-                    <option value="low">Low</option>
-                    <option value="medium">Medium</option>
-                    <option value="high">High</option>
-                  </select>
-                </div>
+                <PrioritySelect
+                  value={formPriority}
+                  onChange={setFormPriority}
+                  label="Priority"
+                  id="form-priority"
+                />
 
                 {/* Date picker */}
                 <div>
@@ -569,39 +605,33 @@ export default function Home() {
           {/* Sort controls */}
           <div className="mb-4 flex gap-3 items-center">
             {/* Priority sort */}
-            <div className="flex-1">
-              <label htmlFor="sort-priority" className="block text-xs font-medium text-slate-700 mb-1">
-                Sort by Priority
-              </label>
-              <select
-                id="sort-priority"
+            <div className="flex-1" onFocus={() => setActiveFocus("tasks")}>
+              <SortSelect
                 value={sortByPriority}
-                onChange={(e) => setSortByPriority(e.target.value as "none" | "high-to-low" | "low-to-high")}
-                onFocus={() => setActiveFocus("tasks")}
-                className="w-full text-sm rounded-lg border border-slate-300 px-3 py-2 text-slate-700 focus:outline-none focus:ring-2 focus:ring-cyan-500"
-              >
-                <option value="none">None</option>
-                <option value="high-to-low">High → Low</option>
-                <option value="low-to-high">Low → High</option>
-              </select>
+                onChange={setSortByPriority}
+                options={[
+                  { value: "none" as const, label: "None", icon: "none" },
+                  { value: "high-to-low" as const, label: "High → Low", icon: "down" },
+                  { value: "low-to-high" as const, label: "Low → High", icon: "up" },
+                ]}
+                label="Sort by Priority"
+                id="sort-priority"
+              />
             </div>
 
             {/* Duration sort */}
-            <div className="flex-1">
-              <label htmlFor="sort-duration" className="block text-xs font-medium text-slate-700 mb-1">
-                Sort by Duration
-              </label>
-              <select
-                id="sort-duration"
+            <div className="flex-1" onFocus={() => setActiveFocus("tasks")}>
+              <SortSelect
                 value={sortByDuration}
-                onChange={(e) => setSortByDuration(e.target.value as "none" | "short-to-long" | "long-to-short")}
-                onFocus={() => setActiveFocus("tasks")}
-                className="w-full text-sm rounded-lg border border-slate-300 px-3 py-2 text-slate-700 focus:outline-none focus:ring-2 focus:ring-cyan-500"
-              >
-                <option value="none">None</option>
-                <option value="short-to-long">Short → Long</option>
-                <option value="long-to-short">Long → Short</option>
-              </select>
+                onChange={setSortByDuration}
+                options={[
+                  { value: "none" as const, label: "None", icon: "none" },
+                  { value: "short-to-long" as const, label: "Short → Long", icon: "up" },
+                  { value: "long-to-short" as const, label: "Long → Short", icon: "down" },
+                ]}
+                label="Sort by Duration"
+                id="sort-duration"
+              />
             </div>
           </div>
 
@@ -782,7 +812,10 @@ export default function Home() {
           return (
             <div
               className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
-              onClick={() => setEditingTaskId(null)}
+              onClick={() => {
+                setEditingTaskId(null);
+                setEditFormValues({});
+              }}
             >
               <div
                 className="bg-white rounded-2xl shadow-xl p-6 max-w-md w-full mx-4 border border-blue-100"
@@ -802,43 +835,22 @@ export default function Home() {
 
                 {/* Time cost selector */}
                 <div className="mb-4">
-                  <label htmlFor="edit-time" className="block text-xs font-medium text-slate-700 mb-1">
-                    Duration
-                  </label>
-                  <select
+                  <DurationSelect
+                    value={editFormValues.timeCost ?? editingTask.timeCost ?? 30}
+                    onChange={(value) => setEditFormValues({ ...editFormValues, timeCost: value })}
+                    label="Duration"
                     id="edit-time"
-                    value={editingTask.timeCost ?? 30}
-                    onChange={(e) => updateTaskTimeCost(editingTaskId, parseInt(e.target.value))}
-                    className="w-full text-sm rounded-lg border border-slate-300 px-3 py-2 text-slate-700 focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                  >
-                    <option value="15">15 min</option>
-                    <option value="30">30 min</option>
-                    <option value="45">45 min</option>
-                    <option value="60">1 hour</option>
-                    <option value="90">1.5 hours</option>
-                    <option value="120">2 hours</option>
-                  </select>
+                  />
                 </div>
 
                 {/* Priority selector */}
                 <div className="mb-4">
-                  <label htmlFor="edit-priority" className="block text-xs font-medium text-slate-700 mb-1">
-                    Priority
-                  </label>
-                  <select
+                  <PrioritySelect
+                    value={editFormValues.priority ?? editingTask.priority ?? undefined}
+                    onChange={(value) => setEditFormValues({ ...editFormValues, priority: value })}
+                    label="Priority"
                     id="edit-priority"
-                    value={editingTask.priority || ""}
-                    onChange={(e) => {
-                      const value = e.target.value as Priority | "";
-                      updateTaskPriority(editingTaskId, value || undefined);
-                    }}
-                    className="w-full text-sm rounded-lg border border-slate-300 px-3 py-2 text-slate-700 focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                  >
-                    <option value="">None</option>
-                    <option value="low">Low</option>
-                    <option value="medium">Medium</option>
-                    <option value="high">High</option>
-                  </select>
+                  />
                 </div>
 
                 {/* Date picker */}
@@ -849,10 +861,10 @@ export default function Home() {
                   <input
                     id="edit-date"
                     type="date"
-                    value={editingTask.dueDate || ""}
+                    value={editFormValues.dueDate ?? editingTask.dueDate ?? ""}
                     onChange={(e) => {
                       const value = e.target.value;
-                      updateTaskDate(editingTaskId, value || undefined);
+                      setEditFormValues({ ...editFormValues, dueDate: value || undefined });
                     }}
                     className="w-full text-sm rounded-lg border border-slate-300 px-3 py-2 focus:border-cyan-500 focus:outline-none focus:ring-2 focus:ring-cyan-400"
                   />
@@ -861,10 +873,26 @@ export default function Home() {
                 {/* Modal buttons */}
                 <div className="flex gap-2 justify-end">
                   <button
-                    onClick={() => setEditingTaskId(null)}
+                    onClick={() => {
+                      setEditingTaskId(null);
+                      setEditFormValues({});
+                    }}
                     className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors"
                   >
-                    Close
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleSaveTaskEdits}
+                    disabled={updatingTaskIds.has(editingTaskId)}
+                    className="px-4 py-2 text-sm font-medium text-white bg-cyan-600 hover:bg-cyan-700 disabled:bg-cyan-400 disabled:cursor-not-allowed rounded-lg transition-colors flex items-center gap-2"
+                  >
+                    {updatingTaskIds.has(editingTaskId) && (
+                      <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                    )}
+                    Save
                   </button>
                 </div>
               </div>
