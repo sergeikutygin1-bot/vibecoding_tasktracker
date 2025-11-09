@@ -1,0 +1,58 @@
+{
+  "users": [
+    {
+      "id": "cmhqhy2q30000k5zcu0jspwws",
+      "name": "Test User",
+      "email": "dev@test.com",
+      "emailVerified": "2025-11-08T16:26:12.986Z",
+      "image": null,
+      "createdAt": "2025-11-08T16:26:13.707Z",
+      "updatedAt": "2025-11-08T16:26:13.707Z"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "cmhqhy2qc0002k5zczao5om3j",
+      "title": "Welcome to your task tracker!",
+      "completed": false,
+      "createdAt": "2025-11-08T16:26:13.717Z",
+      "dueDate": null,
+      "priority": "high",
+      "timeCost": 15,
+      "userId": "cmhqhy2q30000k5zcu0jspwws"
+    },
+    {
+      "id": "cmhqhy2qf0004k5zc9xn8640m",
+      "title": "Try creating a new task",
+      "completed": false,
+      "createdAt": "2025-11-08T16:26:13.719Z",
+      "dueDate": "2025-11-08",
+      "priority": "medium",
+      "timeCost": 30,
+      "userId": "cmhqhy2q30000k5zcu0jspwws"
+    },
+    {
+      "id": "cmhqm7jtv0001k5gh9ruy3rsw",
+      "title": "fsddffzdfs",
+      "completed": false,
+      "createdAt": "2025-11-08T18:25:34.242Z",
+      "dueDate": "2025-11-07",
+      "priority": "medium",
+      "timeCost": 30,
+      "userId": "cmhqhy2q30000k5zcu0jspwws"
+    },
+    {
+      "id": "cmhqm7lxb0003k5ghzkrp06go",
+      "title": "hfcggsdfgdzsfg",
+      "completed": false,
+      "createdAt": "2025-11-08T18:25:36.959Z",
+      "dueDate": null,
+      "priority": null,
+      "timeCost": 30,
+      "userId": "cmhqhy2q30000k5zcu0jspwws"
+    }
+  ],
+  "accounts": [],
+  "sessions": [],
+  "verificationTokens": []
+}

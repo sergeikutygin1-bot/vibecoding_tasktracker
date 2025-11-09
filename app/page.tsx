@@ -5,8 +5,11 @@ import { Task, Priority } from "@/types";
 import { taskAPI } from "@/lib/api-client";
 import toast from "react-hot-toast";
 import Calendar from "./components/Calendar";
+import { useAuth } from "@/lib/auth-context";
+import AuthModal from "./components/AuthModal";
 
 export default function Home() {
+  const { user, loading: authLoading, signOut } = useAuth();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [inputValue, setInputValue] = useState("");
   const [isLoaded, setIsLoaded] = useState(false);
@@ -244,7 +247,7 @@ export default function Home() {
   }
 
   // Helper to get priority color classes
-  const getPriorityColor = (priority?: Priority) => {
+  const getPriorityColor = (priority?: Priority | string | null) => {
     switch (priority) {
       case "low":
         return "border-green-500 text-green-700 bg-green-50";
@@ -258,7 +261,7 @@ export default function Home() {
   };
 
   // Helper to format time cost
-  const formatTimeCost = (minutes: number | undefined): string => {
+  const formatTimeCost = (minutes: number | null | undefined): string => {
     const mins = minutes ?? 30; // Default to 30 if undefined
     if (mins < 60) return `${mins}m`;
     const hours = Math.floor(mins / 60);
@@ -268,7 +271,7 @@ export default function Home() {
   };
 
   // Helper to get priority value for sorting
-  const getPriorityValue = (priority?: Priority): number => {
+  const getPriorityValue = (priority?: Priority | string | null): number => {
     switch (priority) {
       case "high": return 3;
       case "medium": return 2;
@@ -447,10 +450,25 @@ export default function Home() {
           className={`rounded-2xl border bg-white p-6 shadow-md flex flex-col h-[800px] transition-all ${activeFocus === "tasks" ? 'border-blue-400 ring-2 ring-blue-400' : 'border-blue-100'}`}
         >
             <div className="mb-6">
-              <h1 className="text-3xl font-bold text-slate-800">Todo List</h1>
-              <p className="mt-1 text-sm text-slate-600">
-                Keep track of your tasks
-              </p>
+              <div className="flex justify-between items-start">
+                <div>
+                  <h1 className="text-3xl font-bold text-slate-800">Todo List</h1>
+                  <p className="mt-1 text-sm text-slate-600">
+                    {user?.email || 'Keep track of your tasks'}
+                  </p>
+                </div>
+                {user && (
+                  <button
+                    onClick={async () => {
+                      await signOut();
+                      toast.success('Signed out successfully');
+                    }}
+                    className="text-sm text-slate-600 hover:text-slate-800 px-3 py-1 rounded-md hover:bg-slate-100 transition-colors"
+                  >
+                    Sign Out
+                  </button>
+                )}
+              </div>
             </div>
           {/* Input form */}
           <form onSubmit={addTask} className="mb-6">
@@ -854,6 +872,9 @@ export default function Home() {
           );
         })()}
       </div>
+
+      {/* Auth Modal - show when not logged in */}
+      {!authLoading && !user && <AuthModal />}
     </main>
   );
 }

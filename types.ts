@@ -5,7 +5,8 @@ export type Task = {
   title: string;
   completed: boolean;
   createdAt: string;
-  dueDate?: string; // ISO date string (YYYY-MM-DD)
-  priority?: Priority;
-  timeCost?: number; // Duration in minutes
+  dueDate?: string | null; // ISO date string (YYYY-MM-DD)
+  priority?: string | null;
+  timeCost?: number | null; // Duration in minutes
+  userId: string;
 };

@@ -46,7 +46,7 @@ export default function Calendar({ tasks, selectedDate, onDateSelect, activeFocu
   };
 
   // Get priority color for dots
-  const getPriorityDotColor = (priority?: Priority): string => {
+  const getPriorityDotColor = (priority?: Priority | string | null): string => {
     switch (priority) {
       case "low":
         return "bg-green-500";
